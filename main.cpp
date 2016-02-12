@@ -6,9 +6,6 @@
 
 namespace
 {
-void drawPolygon(const double*, int) {}
-void drawCircle(double, double, double) {}
-
 template<class T>
 bool readArray(FILE* file, size_t n, std::vector<T>& out_array)
 {
@@ -30,10 +27,7 @@ protected:
 class Circle: public FeatureType
 {
 public:
-    virtual void draw() const override
-    {
-        drawCircle(m_points[0], m_points[1], m_points[2]);
-    }
+    virtual void draw() const override {}
     virtual bool read(FILE* file) override
     {
         return readArray(file, 3u, m_points);
@@ -43,10 +37,7 @@ public:
 class Triangle: public FeatureType
 {
 public:
-    virtual void draw() const override
-    {
-        drawPolygon(m_points.data(), 6);
-    }
+    virtual void draw() const override {}
     virtual bool read(FILE* file) override
     {
         return readArray(file, 6u, m_points);
@@ -56,10 +47,7 @@ public:
 class Square: public FeatureType
 {
 public:
-    virtual void draw() const override
-    {
-        drawPolygon(m_points.data(), 8);
-    }
+    virtual void draw() const override {}
     virtual bool read(FILE* file) override
     {
         return readArray(file, 8u, m_points);
