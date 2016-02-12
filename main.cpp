@@ -1,119 +1,136 @@
 #include <stdio.h>
 #include <memory>
 #include <map>
+#include <vector>
+#include <functional>
 
-/*
-class Feature
+namespace
 {
-public:
-    enum FeatureType {eUnknown, eCircle, eTriangle, eSquare};
+void drawPolygon(const double*, int) {}
+void drawCircle(double, double, double) {}
 
-    Feature() : type(eUnknown), points(0) { }
-
-    ~Feature()
-    {
-        if (points)
-            delete points;
-    }
-
-    bool isValid()
-    {
-        return type != eUnknown;
-    }
-
-    bool read(FILE* file)
-    {
-        if (fread(&type, sizeof(FeatureType), 1, file) != sizeof(FeatureType))
-            return false;
-        short n = 0;
-        switch (type)
-        {
-        case eCircle: n = 3; break;
-        case eTriangle: n = 6; break;
-        case eSquare: n = 8; break;
-        default: type = eUnknown; return false;
-        }
-        points = new double[n];
-        if (!points)
-            return false;
-        return fread(&points, sizeof(double), n, file) == n*sizeof(double);
-    }
-    void draw()
-    {
-        switch (type)
-        {
-        case eCircle: drawCircle(points[0], points[1], points[2]); break;
-        case eTriangle: drawPolygon(points, 6); break;
-        case eSquare: drawPolygon(points, 8); break;
-        }
-    }
-
-protected:
-    void drawCircle(double centerX, double centerY, double radius);
-    void drawPolygon(double* points, int size);
-
-    double* points;
-    FeatureType type;
-};*/
+template<class T>
+bool readArray(FILE* file, size_t n, std::vector<T>& out_array)
+{
+    out_array.resize(n);
+    return fread(out_array.data(), sizeof(T), n, file) == n;
+}
+} // namespace
 
 class FeatureType
 {
 public:
     virtual void draw() const = 0;
-    virtual bool read( FILE* file ) = 0;
-    virtual int get_type_code() const = 0;
+    virtual bool read(FILE* file) = 0;
+
+protected:
+    std::vector<double> m_points;
 };
 
 class Circle: public FeatureType
 {
 public:
-    virtual void draw() const override {}
-
+    virtual void draw() const override
+    {
+        drawCircle(m_points[0], m_points[1], m_points[2]);
+    }
     virtual bool read(FILE* file) override
     {
-        return true;
+        return readArray(file, 3u, m_points);
     }
+};
 
-    virtual int get_type_code() const override
+class Triangle: public FeatureType
+{
+public:
+    virtual void draw() const override
     {
-        return 1;
+        drawPolygon(m_points.data(), 6);
+    }
+    virtual bool read(FILE* file) override
+    {
+        return readArray(file, 6u, m_points);
+    }
+};
+
+class Square: public FeatureType
+{
+public:
+    virtual void draw() const override
+    {
+        drawPolygon(m_points.data(), 8);
+    }
+    virtual bool read(FILE* file) override
+    {
+        return readArray(file, 8u, m_points);
     }
 };
 
 class Feature
 {
 public:
-    Feature()
+    bool read(FILE* file)
     {
-        if (!register_type(std::unique_ptr<FeatureType>(new Circle()))) {
-            return;
+        std::vector<int> type_id;
+        if (!readArray(file, 1u, type_id)) {
+            return false;
         }
-        m_is_valid = true;
+        if (!setUpTypeById(type_id.front())) {
+            return false;
+        }
+        return m_type->read(file);
+    }
+
+    bool isValid()
+    {
+        return m_type != nullptr;
+    }
+
+    void draw()
+    {
+        m_type->draw();
     }
 
 private:
-    bool register_type(std::unique_ptr<FeatureType> type)
+    bool setUpTypeById(const int type_id)
     {
-        if (m_types.find(type->get_type_code()) != m_types.end()) {
+        static const std::map<int, std::function<std::unique_ptr<FeatureType>()>> type_factories {
+            {1, [](){ return std::unique_ptr<FeatureType>(new Circle); }},
+            {2, [](){ return std::unique_ptr<FeatureType>(new Triangle); }},
+            {3, [](){ return std::unique_ptr<FeatureType>(new Square); }}
+        };
+
+        auto factoryIt = type_factories.find(type_id);
+        if ( factoryIt == type_factories.end()) {
             return false;
         }
-        m_types.insert(std::make_pair(type->get_type_code(), std::move(type)));
+
+        m_type = factoryIt->second();
         return true;
     }
 
-    //void read(FILE* file)
-
 private:
-    bool m_is_valid = false;
-    std::map<int, std::unique_ptr<FeatureType>> m_types;
+    std::unique_ptr<FeatureType> m_type;
+    std::map<int, std::function<std::unique_ptr<FeatureType>()>> m_type_factories;
 };
 
 int main(int argc, char* argv[])
 {
-    /*Feature feature;
-    FILE* file = fopen("features.dat", "r");
-    feature.read(file);
-    if (!feature.isValid())
-        return 1;*/
+    std::unique_ptr< FILE, void(*)(FILE*) > file(fopen("features.dat", "rb"),
+                                                 [](FILE* file){ fclose(file); });
+
+    if (file == nullptr) {
+        return 1;
+    }
+
+    Feature feature;
+    if (!feature.read(file.get())) {
+        return 1;
+    }
+
+    if (!feature.isValid()) {
+        return 1;
+    }
+
     return 0;
 }

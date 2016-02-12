@@ -1,2 +1,2 @@
-# DrawFigures
-Simple program which reads a file and "draws" different figures.
+# DrawFigure
+Simple program which reads a file and "draws" a figure.
